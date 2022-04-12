@@ -41,11 +41,20 @@ orders:
       destinations: [as1, as3]
       products:
         part_0:
-          type: assembly_battery_blue
+          type: assembly_sensor_red
           pose:
             xyz: [-0.1, 0.1, 0]
             rpy: [0, 0, 'pi/3']
-
+        part_1:
+          type: assembly_battery_blue
+          pose:
+            xyz: [0.1, 0.1, 0]
+            rpy: [0, 0, 'pi/2']
+        part_2:
+          type: assembly_battery_blue
+          pose:
+            xyz: [0.1, -0.1, 0]
+            rpy: [0, 0, 0]
   order_1:
     priority: 3
     kitting_robot_health: 1 

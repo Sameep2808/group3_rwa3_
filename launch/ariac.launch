@@ -44,10 +44,10 @@
         </include>
     </group> -->
 
-  <group ns='ariac/kitting'>
+  <!-- <group ns='ariac/kitting'>
     <include file="$(find kitting_moveit_config)/launch/moveit_rviz.launch">
       <arg name="rviz_config" value="$(find group3_rwa3)/rviz/arm_moveit.rviz" />
     </include>
-  </group>
+  </group> -->
 
 </launch>

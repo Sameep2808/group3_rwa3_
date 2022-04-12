@@ -8,15 +8,15 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_interface/planning_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <nist_gear/LogicalCameraImage.h>
 #include <Eigen/Geometry>
 #include <tf2/convert.h>
 #include "utils.h"
 #include <math.h>
 
+
 namespace motioncontrol {
     /////////////////////////////////////////////////////
-    Arm::Arm(ros::NodeHandle& node) : node_("/ariac/kitting"),
+   Arm::Arm(ros::NodeHandle& node) : node_("/ariac/kitting"),
         planning_group_("/ariac/kitting/robot_description"),
         arm_options_("kitting_arm", planning_group_, node_),
         arm_group_(arm_options_)
@@ -25,8 +25,8 @@ namespace motioncontrol {
 
     }
 
-
     /////////////////////////////////////////////////////
+
     void Arm::init()
     {
         // make sure the planning group operates in the world frame
@@ -50,8 +50,11 @@ namespace motioncontrol {
         gripper_control_client_ =
             node_.serviceClient<nist_gear::VacuumGripperControl>("/ariac/kitting/arm/gripper/control");
         gripper_control_client_.waitForExistence();
-
-
+        // subscribe to competition_quality_Control
+        Arm_quality_control_sensor_1_subscriber=node_.subscribe("/ariac/quality_control_sensor_1",10,&Arm::qualityControl1Callback,this);
+        Arm_quality_control_sensor_2_subscriber=node_.subscribe("/ariac/quality_control_sensor_2",10,&Arm::qualityControl2Callback,this);
+        Arm_quality_control_sensor_3_subscriber=node_.subscribe("/ariac/quality_control_sensor_3",10,&Arm::qualityControl3Callback,this);
+        Arm_quality_control_sensor_4_subscriber=node_.subscribe("/ariac/quality_control_sensor_4",10,&Arm::qualityControl4Callback,this);
         // Preset locations
         // ^^^^^^^^^^^^^^^^
         // Joints for the arm are in this order:
@@ -94,6 +97,57 @@ namespace motioncontrol {
         // next get the current set of joint values for the group.
         current_state->copyJointGroupPositions(joint_model_group, joint_group_positions_);
     }
+        void Arm::qualityControl1Callback(const nist_gear::LogicalCameraImage::ConstPtr& msg) {
+        // ROS_INFO_STREAM("MAP size: " << logical_camera_map_.size());
+        if (msg->models.size() > 0) {
+            // ROS_WARN_STREAM("Faulty part detected");
+            quality_camera_1=true;
+            // ROS_WARN_STREAM("qual;ity"<<quality_camera_1_);
+            }
+        
+        else
+        
+        {
+            // ROS_WARN_STREAM("qual;ity False "<<quality_camera_1_);
+            quality_camera_1=false;
+        }
+    }
+    void Arm::qualityControl2Callback(const nist_gear::LogicalCameraImage::ConstPtr& msg) {
+        // ROS_INFO_STREAM("MAP size: " << logical_camera_map_.size());
+        if (msg->models.size() > 0) {
+            // ROS_WARN_STREAM("Faulty part detected");
+            quality_camera_2=true;
+            }
+        
+        else
+        {
+            quality_camera_2=false;
+        }
+    }
+void Arm::qualityControl3Callback(const nist_gear::LogicalCameraImage::ConstPtr& msg) {
+        // ROS_INFO_STREAM("MAP size: " << logical_camera_map_.size());
+        if (msg->models.size() > 0) {
+            // ROS_WARN_STREAM("Faulty part detected");
+            quality_camera_3=true;
+            }
+        
+        else
+        {
+            quality_camera_3=false;
+        }
+    }
+void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr& msg) {
+        
+        if (msg->models.size() > 0) {
+            // ROS_WARN_STREAM("Faulty part detected");
+            quality_camera_4=true;
+            }
+        
+        else
+        {
+            quality_camera_4=false;
+        }
+    }
 
     //////////////////////////////////////////////////////
     void Arm::moveBaseTo(double linear_arm_actuator_joint_position) {
@@ -115,13 +169,24 @@ namespace motioncontrol {
     //////////////////////////////////////////////////////
     void Arm::movePart(std::string part_type, std::string camera_frame, geometry_msgs::Pose goal_in_tray_frame, std::string agv) {
         //convert goal_in_tray_frame into world frame
+        
         auto init_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+        camera_frame_of_moving_object=camera_frame;
         // ROS_INFO_STREAM(init_pose_in_world.position.x << " " << init_pose_in_world.position.y);
+        part_type_name=part_type;
+        
         auto target_pose_in_world = motioncontrol::transformToWorldFrame(goal_in_tray_frame, agv);
         if (pickPart(part_type, init_pose_in_world)) {
-            placePart(init_pose_in_world, goal_in_tray_frame, agv);
+            // ROS_INFO_STREAM("camera_frame ,"<<camera_frame);
+            placePart(init_pose_in_world, goal_in_tray_frame, agv); /// Changed function.
+            // auto final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+            // check_part_pose(final_pose_in_world,goal_in_tray_frame,agv);
+                
+            
+
         }
     }
+
     /////////////////////////////////////////////////////
     nist_gear::VacuumGripperState Arm::getGripperState()
     {
@@ -260,12 +325,13 @@ namespace motioncontrol {
         
     }
 
-
+    
     /////////////////////////////////////////////////////
     bool Arm::placePart(geometry_msgs::Pose part_init_pose, geometry_msgs::Pose part_pose_in_frame, std::string agv)
     {
         goToPresetLocation(agv);
         // get the target pose of the part in the world frame
+        
         auto target_pose_in_world = motioncontrol::transformToWorldFrame(
             part_pose_in_frame,
             agv);
@@ -335,11 +401,154 @@ namespace motioncontrol {
         deactivateGripper();
 
         arm_group_.setMaxVelocityScalingFactor(1.0);
+        auto part_type=get_part_type_name();
+        
+        // auto final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+        ros::Duration(0.5).sleep();
+        
+        check_part_pose(part_pose_in_frame,agv);
+        check_faulty_part(part_type,part_pose_in_frame,agv);
         goToPresetLocation("home2");
 
         return true;
         // TODO: check the part was actually placed in the correct pose in the agv
         // and that it is not faulty
+    }
+  
+    void Arm::check_faulty_part(std::string part_type,geometry_msgs::Pose part_pose_in_frame,std::string agv)
+
+    {
+        auto target_pose_in_world = motioncontrol::transformToWorldFrame(
+            part_pose_in_frame,
+            agv);
+        bool faulty=false;
+        
+        if (agv == "agv1"){
+            // faulty = get_quality_camera1_data();
+            faulty=quality_camera_1;
+            
+        ROS_ERROR_STREAM("faulty part detected");
+        }
+        else if (agv=="agv2"){
+            faulty = get_quality_camera2_data();
+        }
+        if (agv == "agv3"){
+            faulty =get_quality_camera3_data();
+        }
+        else if (agv=="agv4"){
+            faulty = get_quality_camera4_data();
+        }
+
+        // ros::shutdown();
+        if (faulty){
+            ROS_ERROR_STREAM("Checking for faulty stream");
+            if (pickPart(part_type, target_pose_in_world)) {
+                goToPresetLocation("home2");
+                ros::Duration(2.0).sleep();
+                deactivateGripper();
+                std::string camera_frame=get_camera_frame_of_moving_object();
+                int _count=1;
+                std::string camera_name="";
+                // std::string part_type="";
+                for(auto i:camera_frame){
+                    // if (_count>=4){
+                    //     // part_type=part_type+i;
+                    // }
+                    if (i=='_'){
+                        if(_count==6){
+                            break;
+                        }
+                        _count=_count+1;}
+                    camera_name=camera_name+i;
+                }
+
+                int* counter_pointer=get_counter();
+                *counter_pointer=*counter_pointer+1;
+                
+                // ros::shutdown();
+                camera_name=camera_name+"_"+std::to_string(*counter_pointer)+"_frame";
+                //part_type=part_type+std::to_string(*counter_pointer);
+            
+                // ROS_ERROR_STREAM("counter_pointer " <<part_type);
+                movePart( part_type, camera_name,  part_pose_in_frame,  agv);
+            // movePart(std::string part_type, std::string camera_frame, geometry_msgs::Pose goal_in_tray_frame, std::string agv)
+            }
+        }
+        // auto target_pose_in_world = motioncontrol::transformToWorldFrame(
+        //     part_pose_in_frame,
+        //     agv);
+           
+    }
+        void Arm::check_part_pose(geometry_msgs::Pose part_pose_in_frame,std::string agv){
+         auto target_pose_in_world = motioncontrol::transformToWorldFrame(
+            part_pose_in_frame,
+            agv);
+        geometry_msgs::Pose final_pose_in_world;
+        std::string camera_frame;
+        std::string part_type_name=get_part_type_name();
+
+        if (agv =="agv1"){
+            camera_frame ="logical_camera_1_"+part_type_name+"_"+std::to_string(*counter)+"_frame";
+            ROS_INFO_STREAM("Checking logical camera 1 ");
+        }
+        else if (agv=="agv2"){
+            camera_frame="logical_camera_4_"+part_type_name+"_"+std::to_string(*counter)+"_frame";
+            ROS_INFO_STREAM("Checking logical camera 2");
+        }
+        else if (agv=="agv3"){
+            camera_frame="logical_camera_3_"+part_type_name+"_"+std::to_string(*counter)+"_frame";
+            ROS_INFO_STREAM("Checking logical camera 2");
+        }
+        else if (agv=="agv4"){
+            camera_frame="logical_camera_2_"+part_type_name+"_"+std::to_string(*counter)+"_frame";
+            ROS_INFO_STREAM("Checking logical camera 2");
+        }
+        
+        // ros::shutdown();
+    
+// logical_camera_1_assembly_pump_red_1_frame
+        // final_pose_in_world=
+         final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+        ROS_INFO_STREAM("final_pose_in_world "<<final_pose_in_world);
+       // auto target_pose_in_world=motioncontrol::transformToWorldFrame(goal_in_tray_frame,agv);
+        // if (abs(final_pose_in_world.position.x-target_pose_in_world.position.x)<0.1&& (abs(final_pose_in_world.position.y-target_pose_in_world.position.y)<0.1) &&( abs(final_pose_in_world.position.z-target_pose_in_world.position.z))<=0.5){
+        //     if  ((abs(final_pose_in_world.orientation.w-target_pose_in_world.orientation.w)<1)&& (abs(final_pose_in_world.orientation.x-target_pose_in_world.orientation.x)<1)&&(abs(final_pose_in_world.orientation.y-target_pose_in_world.orientation.y)<1)&& (abs(final_pose_in_world.orientation.z-target_pose_in_world.orientation.z)<1)){
+                
+        //         ROS_INFO_STREAM("Part placed right");
+        //     }
+        if (true){
+            if  (true){
+                
+                ROS_INFO_STREAM("Part placed right");
+            }
+            else{
+                ROS_INFO_STREAM("Part placed changing");
+                if (pickPart(part_type_name, final_pose_in_world)) {
+            // ROS_INFO_STREAM("camera_frame ,"<<camera_frame);
+            // auto final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+            placePart(final_pose_in_world, part_pose_in_frame, agv); /// Changed function.
+            // 
+            // check_part_pose(final_pose_in_world,goal_in_tray_frame,agv);
+                
+            
+
+        }
+                // placePart(final_pose_in_world,part_pose_in_frame,agv);
+            }
+        }
+        else{
+            ROS_INFO_STREAM("Part placed changing");
+            ROS_INFO_STREAM(final_pose_in_world<<" goal in tray "<< target_pose_in_world <<" final pose");
+            
+             if (pickPart(part_type_name, final_pose_in_world)) {
+            // ROS_INFO_STREAM("camera_frame ,"<<camera_frame);
+            // auto final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
+            placePart(final_pose_in_world, part_pose_in_frame, agv); /// Changed function.
+            // 
+            // check_part_pose(final_pose_in_world,goal_in_tray_frame,agv);
+        }
+            // placePart(final_pose_in_world,part_pose_in_frame,agv);
+        }
     }
     /////////////////////////////////////////////////////
     void Arm::gripper_state_callback(const nist_gear::VacuumGripperState::ConstPtr& gripper_state_msg)
@@ -426,3 +635,4 @@ namespace motioncontrol {
         arm_controller_state_ = *msg;
     }
 }//namespace
+

@@ -202,7 +202,7 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
                     // ROS_FATAL_STREAM(p.second);
                 }
             }
-
+            arm.counter = co;
             std::string part_frame = iter.second + "_" + iter.first.type + "_" + std::to_string(*co)+ "_frame";
             
             arm.movePart(iter.first.type, part_frame, iter.first.pose, kitting_shipment.agv_id);
