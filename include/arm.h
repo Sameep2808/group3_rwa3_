@@ -19,7 +19,6 @@
 #include <nist_gear/LogicalCameraImage.h>
 // custom
 #include "utils.h"
-#include <nist_gear/LogicalCameraImage.h>
 
 namespace motioncontrol {
 
@@ -39,17 +38,48 @@ namespace motioncontrol {
             std::string name;
         } start, bin, agv, grasp;
 
+        /**
+        * @brief A queued part to finalize before shipping.
+        */
+        struct QueuedPartToFinalize {
+            const int type;
+            const std::string agv;
+            const geometry_msgs::Pose init_pose_in_world;
+            const geometry_msgs::Pose goal_in_tray_frame;
+            const std::string part_type;
+            const geometry_msgs::Pose part_pose_in_frame;
+
+            QueuedPartToFinalize(const std::string& agv_,
+                                 const geometry_msgs::Pose& init_pose_in_world_,
+                                 const geometry_msgs::Pose& goal_in_tray_frame_) :
+                type(1),
+                agv(agv_),
+                init_pose_in_world(init_pose_in_world_),
+                goal_in_tray_frame(goal_in_tray_frame_)
+            {}
+            QueuedPartToFinalize(const std::string& agv_,
+                                 const std::string& part_type_,
+                                 const geometry_msgs::Pose& part_pose_in_frame_) :
+                type(2),
+                agv(agv_),
+                part_type(part_type_),
+                part_pose_in_frame(part_pose_in_frame_)
+            {}
+        };
+
         Arm(ros::NodeHandle& node_handle);
         /**
          * @brief Initialize the object
          */
         void init();
         bool pickPart(std::string part_type, geometry_msgs::Pose part_pose);
-        bool placePart(geometry_msgs::Pose part_init_pose, geometry_msgs::Pose part_goal_pose, std::string agv);
+        bool placePart(geometry_msgs::Pose part_init_pose, geometry_msgs::Pose part_goal_pose, std::string agv, bool* blackout_active=0);
         void testPreset(const std::vector<ArmPresetLocation>& preset_list);
-        void movePart(std::string part_type, std::string camera_frame, geometry_msgs::Pose goal_in_tray_frame, std::string agv);
+        void movePart(std::string part_type, std::string camera_frame, geometry_msgs::Pose goal_in_tray_frame, std::string agv, bool* blackout_active);
         void activateGripper();
         void deactivateGripper();
+        bool hasQueuedParts();
+        void finalizeQueuedParts();
 
         void check_part_pose(geometry_msgs::Pose target_pose_in_world,std::string agv);
 
@@ -130,6 +160,10 @@ namespace motioncontrol {
 
         std::string part_type_name;
 
+        // A list of parts that are queued for finalization, and a set of names
+        // of AGV's that have a queued part on it
+        std::vector<QueuedPartToFinalize> queued_parts;
+
         int *get_counter(){
             return counter;
         }
@@ -141,6 +175,10 @@ namespace motioncontrol {
         void gripper_state_callback(const nist_gear::VacuumGripperState::ConstPtr& gripper_state_msg);
         void arm_joint_states_callback_(const sensor_msgs::JointState::ConstPtr& joint_state_msg);
         void arm_controller_state_callback(const control_msgs::JointTrajectoryControllerState::ConstPtr& msg);
+
+        void finalizePlacedPart(const std::string& agv,
+                                const std::string& part_type,
+                                const geometry_msgs::Pose& part_pose_in_frame);
 
         void check_faulty_part(std::string part_type,geometry_msgs::Pose part_pose_in_frame,std::string agv);
         

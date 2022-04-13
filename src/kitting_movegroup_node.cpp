@@ -21,6 +21,18 @@
 #include "utils.h"
 #include "nist_gear/Product.h"
 
+void ship_agv(ros::NodeHandle& nh, const nist_gear::KittingShipment& kitting_shipment)
+{
+    ROS_INFO_STREAM("Shipping AGV " << kitting_shipment.agv_id);
+    ros::Duration(sleep(1.0));
+    motioncontrol::Agv agv{ nh, kitting_shipment.agv_id };
+    if (agv.getAGVStatus()) {
+        agv.shipAgv(kitting_shipment.shipment_type, kitting_shipment.station_id);
+        ros::Duration(2.0).sleep();
+    }
+    ros::Duration(2.0).sleep();
+}
+
 int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &product_list, bool* blackout_active, int P){
 
     // start the competition
@@ -50,6 +62,8 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
     // parse each kitting shipment
 
     // std::vector<std::pair<std::string, int>> product_list{};
+
+    std::vector<nist_gear::KittingShipment> queued_shipments;
 
     while(1){
     
@@ -211,17 +225,17 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
             arm.counter = co;
             std::string part_frame = iter.second + "_" + iter.first.type + "_" + std::to_string(*co)+ "_frame";
             
-            arm.movePart(iter.first.type, part_frame, iter.first.pose, kitting_shipment.agv_id);
+            ROS_INFO_STREAM("Kitting node frame: " << part_frame);
+            arm.movePart(iter.first.type, part_frame, iter.first.pose, kitting_shipment.agv_id, blackout_active);
             product_placed_in_shipment++;
             // if we have placed all products in this shipment then ship the AGV
             if (product_placed_in_shipment == kitting_shipment.products.size()) {
-                ros::Duration(sleep(1.0));
-                motioncontrol::Agv agv{ node_handle, kitting_shipment.agv_id };
-                if (agv.getAGVStatus()) {
-                    agv.shipAgv(kitting_shipment.shipment_type, kitting_shipment.station_id);
-                    ros::Duration(2.0).sleep();
+                if (*blackout_active) {
+                    queued_shipments.push_back(kitting_shipment);
+                    ROS_INFO_STREAM("Queued kitting shipment for AGV " << kitting_shipment.agv_id);
+                } else {
+                    ship_agv(node_handle, kitting_shipment);
                 }
-                ros::Duration(2.0).sleep();
             }
         }
 
@@ -236,6 +250,22 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
        
         
     }
+
+    if (arm.hasQueuedParts())
+    {
+        // TODO: blatant race condition...
+        while (*blackout_active)
+        {
+            ros::Duration(0.5).sleep();
+        }
+        arm.finalizeQueuedParts();
+        while (!queued_shipments.empty())
+        {
+            ship_agv(node_handle, *(queued_shipments.end()));
+            queued_shipments.pop_back();
+        }
+    }
+
     auto on = competition.get_order_id();
     if(orderid.compare(on) != 0){
             ROS_FATAL_STREAM(on);
