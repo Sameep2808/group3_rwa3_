@@ -40,7 +40,8 @@ bool contains(std::vector<T> vec, const T& elem)
     return result;
 }
 
-int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &product_list){
+
+int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &product_list, int P){
 
     // start the competition
     motioncontrol::Competition competition(node_handle);
@@ -143,6 +144,7 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
         std::vector<std::pair<nist_gear::Product, std::string> > camera_for_product{};
         // If we got here it means cameras got some data
         // check which camera found products needed in this shipment
+        if(P == 0){
         for (const auto& product : kitting_shipment.products) {
             if (camera2_data.first.compare(product.type) == 0) {
                 std::pair<nist_gear::Product, std::string> entry;
@@ -173,7 +175,39 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
                 ros::shutdown();
                 return 1;
             }
-        }
+        }}
+        else{
+        for (const auto& product : kitting_shipment.products) {
+            if (camera4_data.first.compare(product.type) == 0) {
+                std::pair<nist_gear::Product, std::string> entry;
+                entry.first = product;
+                entry.second = camera4_data.second;
+                camera_for_product.emplace_back(entry);
+            }
+            else if (camera1_data.first.compare(product.type) == 0) {
+                std::pair<nist_gear::Product, std::string> entry;
+                entry.first = product;
+                entry.second = camera1_data.second;
+                camera_for_product.emplace_back(entry);
+            }
+            else if (camera3_data.first.compare(product.type) == 0) {
+                std::pair<nist_gear::Product, std::string> entry;
+                entry.first = product;
+                entry.second = camera3_data.second;
+                camera_for_product.emplace_back(entry);
+            }
+            else if (camera2_data.first.compare(product.type) == 0) {
+                std::pair<nist_gear::Product, std::string> entry;
+                entry.first = product;
+                entry.second = camera2_data.second;
+                camera_for_product.emplace_back(entry);
+            }
+            else {
+                ROS_FATAL_STREAM("No matching part found by any logical camera");
+                ros::shutdown();
+                return 1;
+            }
+        }}
 
         if (camera_for_product.empty()) {
             ROS_FATAL_STREAM("Product not found by camera");
@@ -184,15 +218,7 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
         // keep track of how many products have been placed in this shipment
         int product_placed_in_shipment{};
         for (auto iter : camera_for_product) {
-            auto on = competition.get_order_id();
-            if(orderid.compare(on) != 0){
-                ROS_FATAL_STREAM("HIGH PRIORITY ORDER");
-                ROS_FATAL_STREAM(on);
-                orderid = on;   
-                ros::NodeHandle nh;
-                int fr = kit(nh, product_list); 
-        }
-
+            
             int* co;
             for (auto& p : product_list){
                 if(p.first.compare(iter.first.type) == 0)
@@ -213,8 +239,19 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
                 motioncontrol::Agv agv{ node_handle, kitting_shipment.agv_id };
                 if (agv.getAGVStatus()) {
                     agv.shipAgv(kitting_shipment.shipment_type, kitting_shipment.station_id);
+                    ros::Duration(2.0).sleep();
                 }
+                ros::Duration(2.0).sleep();
             }
+        }
+
+        auto on = competition.get_order_id();
+        if(orderid.compare(on) != 0){
+                ROS_FATAL_STREAM("HIGH PRIORITY ORDER");
+                ROS_FATAL_STREAM(on);
+                orderid = on;   
+                ros::NodeHandle nh;
+                int fr = kit(nh, product_list, 0); 
         }
        
         
@@ -247,7 +284,7 @@ int main(int argc, char** argv) {
     ros::AsyncSpinner spinner(0);
     spinner.start();
     std::vector<std::pair<std::string, int>> product_list{};
-    int r = kit(node_handle, product_list);
+    int r = kit(node_handle, product_list, 0);
     
     // competition.endCompetition();
     ros::waitForShutdown();

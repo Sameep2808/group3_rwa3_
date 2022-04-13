@@ -97,3 +97,11 @@ models_over_bins:
         rpy: [0, 0, 0]
         num_models_x: 2
         num_models_y: 2
+
+sensor_blackout:
+  product_count: 9
+  duration: 30
+
+faulty_products:
+  - assembly_battery_blue_2
+  - assembly_sensor_red_3

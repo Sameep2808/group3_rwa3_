@@ -45,10 +45,10 @@ Visualization Manager:
       Move Group Namespace: ""
       MoveIt_Allow_Approximate_IK: false
       MoveIt_Allow_External_Program: false
-      MoveIt_Allow_Replanning: true
+      MoveIt_Allow_Replanning: false
       MoveIt_Allow_Sensor_Positioning: false
-      MoveIt_Planning_Attempts: 20
-      MoveIt_Planning_Time: 45
+      MoveIt_Planning_Attempts: 2
+      MoveIt_Planning_Time: 2000
       MoveIt_Use_Cartesian_Path: false
       MoveIt_Use_Constraint_Aware_IK: true
       MoveIt_Warehouse_Host: 127.0.0.1

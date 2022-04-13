@@ -267,12 +267,12 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
         // pre-grasp pose: somewhere above the part
         auto pregrasp_pose = part_init_pose;
         pregrasp_pose.orientation = arm_ee_link_pose.orientation;
-        pregrasp_pose.position.z = z_pos + 0.06;
+        pregrasp_pose.position.z = z_pos + 0.03;
 
         // grasp pose: right above the part
         auto grasp_pose = part_init_pose;
         grasp_pose.orientation = arm_ee_link_pose.orientation;
-        grasp_pose.position.z = z_pos + 0.03;
+        grasp_pose.position.z = z_pos + 0.015;
 
         waypoints.push_back(pregrasp_pose);
         waypoints.push_back(grasp_pose);
@@ -392,23 +392,24 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
         target_pose_in_world.orientation.y = q_rslt.y();
         target_pose_in_world.orientation.z = q_rslt.z();
         target_pose_in_world.orientation.w = q_rslt.w();
-        target_pose_in_world.position.z += 0.2;
+        target_pose_in_world.position.z += 0.15;
 
         arm_group_.setMaxVelocityScalingFactor(0.1);
         arm_group_.setPoseTarget(target_pose_in_world);
         arm_group_.move();
         ros::Duration(2.0).sleep();
         deactivateGripper();
-
+        goToPresetLocation(agv);
         arm_group_.setMaxVelocityScalingFactor(1.0);
         auto part_type=get_part_type_name();
+        
         
         // auto final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
         ros::Duration(0.5).sleep();
         
         check_part_pose(part_pose_in_frame,agv);
         check_faulty_part(part_type,part_pose_in_frame,agv);
-        goToPresetLocation("home2");
+        //goToPresetLocation("home2");
 
         return true;
         // TODO: check the part was actually placed in the correct pose in the agv
@@ -416,7 +417,6 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
     }
   
     void Arm::check_faulty_part(std::string part_type,geometry_msgs::Pose part_pose_in_frame,std::string agv)
-
     {
         auto target_pose_in_world = motioncontrol::transformToWorldFrame(
             part_pose_in_frame,
@@ -424,16 +424,13 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
         bool faulty=false;
         
         if (agv == "agv1"){
-            // faulty = get_quality_camera1_data();
-            faulty=quality_camera_1;
-            
-        ROS_ERROR_STREAM("faulty part detected");
+            faulty = get_quality_camera1_data();
         }
         else if (agv=="agv2"){
             faulty = get_quality_camera2_data();
         }
         if (agv == "agv3"){
-            faulty =get_quality_camera3_data();
+            faulty = get_quality_camera3_data();
         }
         else if (agv=="agv4"){
             faulty = get_quality_camera4_data();
@@ -442,9 +439,10 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
         // ros::shutdown();
         if (faulty){
             ROS_ERROR_STREAM("Checking for faulty stream");
+            goToPresetLocation(agv);
             if (pickPart(part_type, target_pose_in_world)) {
                 goToPresetLocation("home2");
-                ros::Duration(2.0).sleep();
+                ros::Duration(10.0).sleep();
                 deactivateGripper();
                 std::string camera_frame=get_camera_frame_of_moving_object();
                 int _count=1;
@@ -511,8 +509,8 @@ void Arm::qualityControl4Callback(const nist_gear::LogicalCameraImage::ConstPtr&
          final_pose_in_world = motioncontrol::transformToWorldFrame(camera_frame);
         ROS_INFO_STREAM("final_pose_in_world "<<final_pose_in_world);
        // auto target_pose_in_world=motioncontrol::transformToWorldFrame(goal_in_tray_frame,agv);
-        // if (abs(final_pose_in_world.position.x-target_pose_in_world.position.x)<0.1&& (abs(final_pose_in_world.position.y-target_pose_in_world.position.y)<0.1) &&( abs(final_pose_in_world.position.z-target_pose_in_world.position.z))<=0.5){
-        //     if  ((abs(final_pose_in_world.orientation.w-target_pose_in_world.orientation.w)<1)&& (abs(final_pose_in_world.orientation.x-target_pose_in_world.orientation.x)<1)&&(abs(final_pose_in_world.orientation.y-target_pose_in_world.orientation.y)<1)&& (abs(final_pose_in_world.orientation.z-target_pose_in_world.orientation.z)<1)){
+        // if (abs(final_pose_in_world.position.x-target_pose_in_world.position.x)<0.3&& (abs(final_pose_in_world.position.y-target_pose_in_world.position.y)<0.3) ){
+        //     if  ((abs(final_pose_in_world.orientation.x-target_pose_in_world.orientation.x)<1)&&(abs(final_pose_in_world.orientation.y-target_pose_in_world.orientation.y)<1)&& (abs(final_pose_in_world.orientation.z-target_pose_in_world.orientation.z)<1)){
                 
         //         ROS_INFO_STREAM("Part placed right");
         //     }
