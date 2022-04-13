@@ -21,27 +21,7 @@
 #include "utils.h"
 #include "nist_gear/Product.h"
 
-/**
- * @brief Helper function to check if an item is in a vector
- *
- * @tparam T
- * @param vec Vector to check
- * @param elem Item to check is inside the vector
- * @return true The item is in the vector
- * @return false The item is not in the vector
- */
-template <typename T>
-bool contains(std::vector<T> vec, const T& elem)
-{
-    bool result = false;
-    if (find(vec.begin(), vec.end(), elem) != vec.end()) {
-        result = true;
-    }
-    return result;
-}
-
-
-int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &product_list, int P){
+int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &product_list, bool* blackout_active, int P){
 
     // start the competition
     motioncontrol::Competition competition(node_handle);
@@ -251,7 +231,7 @@ int kit(ros::NodeHandle& node_handle, std::vector<std::pair<std::string, int>> &
                 ROS_FATAL_STREAM(on);
                 orderid = on;   
                 ros::NodeHandle nh;
-                int fr = kit(nh, product_list, 0); 
+                int fr = kit(nh, product_list, blackout_active, 0); 
         }
        
         
@@ -279,12 +259,70 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "rwa3_node_cpp");
     ros::NodeHandle node_handle;
 
+    // Utilities to monitor for a sensor blackout and react to it
+    bool blackout_active = false;
+    bool sensors_started = false;
+    ros::Time last_sensor_update;
+    ros::Timer watch_for_blackouts_tmr = node_handle.createTimer(
+        ros::Duration(1.0),
+        [&](const ros::TimerEvent& evt) {
+            // Assume this isn't a blackout if we haven't heard from any sensor
+            // ever and that the system is still starting up
+            if (sensors_started && !blackout_active)
+            {
+                // If we haven't heard from a sensor in over a second, assume
+                // we're in a blackout
+                blackout_active = (ros::Time::now()-last_sensor_update).toSec() > 1.0;
+                if (blackout_active)
+                {
+                    ROS_ERROR_STREAM("Sensor blackout detected!");
+                }
+            }
+        }
+    );
+    const auto logical_camera_image_callback = [&](const nist_gear::LogicalCameraImage::ConstPtr& msg) {
+        // This just says we have heard from any sensor throughout the lifetime
+        // of the application
+        sensors_started = true;
+        // Right now is the most recent update we've heard from a sensor
+        last_sensor_update = ros::Time::now();
+        // If we're in a blackout, we're exiting it
+        if (blackout_active)
+        {
+            ROS_INFO_STREAM("Sensor blackout ended.");
+            blackout_active = false;
+        }
+    };
+    const std::vector<std::string> logical_camera_image_topics = {
+        "/ariac/logical_camera_bins0",
+        "/ariac/logical_camera_bins1",
+        "/ariac/logical_camera_bins2",
+        "/ariac/logical_camera_bins3",
+        "/ariac/quality_control_sensor_0",
+        "/ariac/quality_control_sensor_1",
+        "/ariac/quality_control_sensor_2",
+        "/ariac/quality_control_sensor_3"
+    };
+    std::vector<ros::Subscriber> logical_camera_image_subs;
+    for (auto topic_iter = logical_camera_image_topics.cbegin();
+         topic_iter != logical_camera_image_topics.cend();
+         ++topic_iter)
+    {
+        logical_camera_image_subs.push_back(
+            node_handle.subscribe<nist_gear::LogicalCameraImage>(
+                *topic_iter,
+                1,
+                logical_camera_image_callback
+            )
+        );
+    }
+
     // 0 means that the spinner will use as many threads as there are processors on your machine.
     //If you use 3 for example, only 3 threads will be used.
     ros::AsyncSpinner spinner(0);
     spinner.start();
     std::vector<std::pair<std::string, int>> product_list{};
-    int r = kit(node_handle, product_list, 0);
+    int r = kit(node_handle, product_list, &blackout_active, 0);
     
     // competition.endCompetition();
     ros::waitForShutdown();
